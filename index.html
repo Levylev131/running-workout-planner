@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Run &amp; Workout Planner</title>
+<link rel="stylesheet" href="styles.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+</head>
+<body>
+<header class="topbar">
+  <h1>Run &amp; Workout Planner</h1>
+</header>
+
+<nav class="tabs" id="tabs">
+  <button class="tab active" data-tab="plan">Upcoming</button>
+  <button class="tab" data-tab="history">History</button>
+</nav>
+
+<main id="plan-tab" class="view active">
+  <button class="btn primary add-btn" id="new-plan-btn">+ Plan a session</button>
+  <div id="plan-list" class="session-list"></div>
+</main>
+
+<main id="history-tab" class="view">
+  <button class="btn primary add-btn" id="log-unplanned-btn">+ Log unplanned session</button>
+  <div id="history-list" class="session-list"></div>
+</main>
+
+<div id="modal-overlay" class="modal-overlay hidden">
+  <div class="modal" id="modal-content"></div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="db.js"></script>
+<script src="routes.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
