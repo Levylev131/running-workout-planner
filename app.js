@@ -209,7 +209,10 @@ function openPlanForm(existing) {
                <button type="button" class="btn" id="edit-route-btn">Edit route</button>
                <button type="button" class="btn danger" id="clear-route-btn">Clear</button>
              </div>`
-          : `<button type="button" class="btn" id="set-route-btn">Set route on map</button>`}
+          : `<div class="route-buttons">
+               <button type="button" class="btn" id="set-route-btn">Draw route on map</button>
+               <button type="button" class="btn" id="random-route-btn">🎲 Random route</button>
+             </div>`}
       </div>
       <label>Notes
         <textarea name="notes" rows="3" placeholder="target pace, exercises, anything else">${escapeHtml(s.planned?.notes)}</textarea>
@@ -240,6 +243,17 @@ function openPlanForm(existing) {
       syncDraftFromForm(s);
       s.planned.route = null;
       openPlanForm(s);
+    });
+  }
+  const randomRouteBtn = document.getElementById("random-route-btn");
+  if (randomRouteBtn) {
+    randomRouteBtn.addEventListener("click", () => {
+      syncDraftFromForm(s);
+      openRandomRouteBuilder(s, (routeData) => {
+        s.planned.route = routeData;
+        s.planned.distance = routeData.distance;
+        openPlanForm(s);
+      });
     });
   }
 

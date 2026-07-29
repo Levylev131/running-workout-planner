@@ -255,6 +255,16 @@ body {
 
 .route-section { display: flex; }
 
+.route-buttons {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+
+.route-buttons .btn {
+  flex: 1;
+}
+
 .route-summary {
   display: flex;
   align-items: center;

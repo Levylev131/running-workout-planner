@@ -71,6 +71,48 @@
     return [parseFloat(data[0].lat), parseFloat(data[0].lon)];
   }
 
+  // Great-circle "destination point" formula: given a start point, a compass
+  // bearing, and a distance, returns the [lat,lng] that far away in that
+  // direction. Used to pick a random target for the one-way route generator.
+  function destinationPoint(lat, lng, bearingDeg, distanceMiles) {
+    const R = 3958.8;
+    const delta = distanceMiles / R;
+    const theta = (bearingDeg * Math.PI) / 180;
+    const phi1 = (lat * Math.PI) / 180;
+    const lambda1 = (lng * Math.PI) / 180;
+    const phi2 = Math.asin(Math.sin(phi1) * Math.cos(delta) + Math.cos(phi1) * Math.sin(delta) * Math.cos(theta));
+    const lambda2 =
+      lambda1 + Math.atan2(Math.sin(theta) * Math.sin(delta) * Math.cos(phi1), Math.cos(delta) - Math.sin(phi1) * Math.sin(phi2));
+    return [(phi2 * 180) / Math.PI, (((lambda2 * 180) / Math.PI + 540) % 360) - 180];
+  }
+
+  // Free, no-signup routing along real streets/paths (OSRM's public demo
+  // server). Used to turn a random compass direction into an actual walkable
+  // one-way route rather than a straight line through buildings/water.
+  async function fetchOneWayRoute(startLatLng, endLatLng) {
+    const url = `https://router.project-osrm.org/route/v1/foot/${startLatLng[1]},${startLatLng[0]};${endLatLng[1]},${endLatLng[0]}?overview=full&geometries=geojson`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (!res.ok || data.code !== "Ok" || !data.routes || !data.routes.length) {
+      throw new Error("No route found that way — try again.");
+    }
+    const route = data.routes[0];
+    const points = route.geometry.coordinates.map(([lng, lat]) => [lat, lng]);
+    const distance = route.distance / 1609.34;
+    return { points, distance };
+  }
+
+  async function generateRandomOneWayRoute(startLatLng, targetMiles, attempt = 0) {
+    const bearing = Math.random() * 360;
+    const dest = destinationPoint(startLatLng[0], startLatLng[1], bearing, targetMiles);
+    try {
+      return await fetchOneWayRoute(startLatLng, dest);
+    } catch (err) {
+      if (attempt < 3) return generateRandomOneWayRoute(startLatLng, targetMiles, attempt + 1);
+      throw err;
+    }
+  }
+
   function tileLayer() {
     return L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
@@ -224,6 +266,111 @@
     });
   }
 
+  function openRandomRouteBuilder(session, onConfirm) {
+    const defaultMiles = (session.planned && session.planned.distance) || 3;
+    openModal(`
+      <h2>Random route</h2>
+      <form id="random-route-form">
+        <label>How many miles?
+          <input name="miles" type="number" step="0.1" min="0.1" value="${defaultMiles}" required>
+        </label>
+        <div class="form-actions">
+          <button type="button" class="btn" id="cancel-btn">Cancel</button>
+          <button type="submit" class="btn primary">Generate</button>
+        </div>
+      </form>
+    `);
+    document.getElementById("cancel-btn").addEventListener("click", () => openPlanForm(session));
+    document.getElementById("random-route-form").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const miles = parseFloat(fd.get("miles")) || 3;
+      runRandomRouteMap(session, miles, onConfirm);
+    });
+  }
+
+  function runRandomRouteMap(session, targetMiles, onConfirm) {
+    openModal(
+      `
+      <div class="route-toolbar">
+        <span class="route-status" id="route-status">Finding your location…</span>
+        <button type="button" class="btn" id="route-cancel-btn">Cancel</button>
+      </div>
+      <div id="route-map"></div>
+      <div class="route-footer" id="route-footer">
+        <div class="route-distance" id="route-distance"></div>
+        <div class="route-actions">
+          <button type="button" class="btn" id="reroll-btn" disabled>Reroll</button>
+          <button type="button" class="btn primary" id="confirm-random-btn" disabled>Use this route</button>
+        </div>
+      </div>
+    `,
+      { fullscreen: true }
+    );
+
+    const map = L.map("route-map").setView([39.8283, -98.5795], 4);
+    tileLayer().addTo(map);
+    requestAnimationFrame(() => map.invalidateSize());
+
+    function setStatus(text) {
+      const el = document.getElementById("route-status");
+      if (el) el.textContent = text;
+    }
+
+    let startLatLng = null;
+    let currentRoute = null;
+    const polyline = L.polyline([], { color: "#4a6d5c" }).addTo(map);
+
+    async function generate() {
+      document.getElementById("reroll-btn").disabled = true;
+      document.getElementById("confirm-random-btn").disabled = true;
+      document.getElementById("route-distance").textContent = "";
+      setStatus(`Generating a ${targetMiles} mi route…`);
+      try {
+        const route = await generateRandomOneWayRoute(startLatLng, targetMiles);
+        currentRoute = route;
+        polyline.setLatLngs(route.points);
+        map.fitBounds(polyline.getBounds(), { padding: [20, 20] });
+        setStatus("");
+        document.getElementById("route-distance").textContent = `Target ${targetMiles} mi → ${route.distance.toFixed(2)} mi`;
+      } catch (err) {
+        currentRoute = null;
+        setStatus(err.message || "Couldn't generate a route — try again.");
+      }
+      document.getElementById("reroll-btn").disabled = false;
+      document.getElementById("confirm-random-btn").disabled = !currentRoute;
+    }
+
+    document.getElementById("reroll-btn").addEventListener("click", generate);
+    document.getElementById("confirm-random-btn").addEventListener("click", () => {
+      if (!currentRoute) return;
+      const routeData = {
+        mode: "random",
+        points: currentRoute.points,
+        distance: Math.round(currentRoute.distance * 100) / 100,
+      };
+      map.remove();
+      onConfirm(routeData);
+    });
+
+    document.getElementById("route-cancel-btn").addEventListener("click", () => {
+      map.remove();
+      openPlanForm(session);
+    });
+
+    tryGeolocation()
+      .catch(() => locateApprox())
+      .then(([lat, lng]) => {
+        startLatLng = [lat, lng];
+        L.marker(startLatLng).addTo(map);
+        map.setView(startLatLng, 14);
+        return generate();
+      })
+      .catch(() => {
+        setStatus("Couldn't find your location — can't generate a route.");
+      });
+  }
+
   function viewRouteModal(route) {
     openModal(
       `
@@ -249,5 +396,6 @@
   }
 
   window.openRouteBuilder = openRouteBuilder;
+  window.openRandomRouteBuilder = openRandomRouteBuilder;
   window.viewRouteModal = viewRouteModal;
 })();
