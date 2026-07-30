@@ -6,6 +6,16 @@
 <title>Run &amp; Workout Planner</title>
 <link rel="stylesheet" href="styles.css" />
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" href="icons/icon-192.png" />
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+<meta name="theme-color" content="#4a6d5c" />
+
+<!-- iOS home-screen install support (no native install prompt on iOS, so these are what make "Add to Home Screen" behave like a real app) -->
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="Run Planner" />
 </head>
 <body>
 <header class="topbar">
@@ -35,5 +45,16 @@
 <script src="db.js"></script>
 <script src="routes.js"></script>
 <script src="app.js"></script>
+<script>
+  if ("serviceWorker" in navigator) {
+    if (location.protocol === "https:" || location.hostname === "localhost") {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("sw.js").catch((err) => {
+          console.warn("Service worker registration failed:", err);
+        });
+      });
+    }
+  }
+</script>
 </body>
 </html>
