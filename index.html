@@ -25,6 +25,7 @@
 <nav class="tabs" id="tabs">
   <button class="tab active" data-tab="plan">Upcoming</button>
   <button class="tab" data-tab="history">History</button>
+  <button class="tab" data-tab="calendar">Calendar</button>
 </nav>
 
 <main id="plan-tab" class="view active">
@@ -37,6 +38,10 @@
   <div id="history-list" class="session-list"></div>
 </main>
 
+<main id="calendar-tab" class="view">
+  <div id="calendar-root"></div>
+</main>
+
 <div id="modal-overlay" class="modal-overlay hidden">
   <div class="modal" id="modal-content"></div>
 </div>
@@ -44,6 +49,7 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="db.js"></script>
 <script src="routes.js"></script>
+<script src="calendar.js"></script>
 <script src="app.js"></script>
 <script>
   if ("serviceWorker" in navigator) {

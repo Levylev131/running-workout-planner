@@ -4,6 +4,7 @@ async function loadSessions() {
   sessions = await Sessions.all();
   renderPlanTab();
   renderHistoryTab();
+  renderCalendarTab();
 }
 
 // ---------- helpers ----------
@@ -39,14 +40,8 @@ function historySessions() {
 
 // ---------- rendering ----------
 
-function renderPlanTab() {
-  const list = document.getElementById("plan-list");
-  const items = upcomingSessions();
-  if (items.length === 0) {
-    list.innerHTML = `<p class="empty">Nothing planned yet.</p>`;
-    return;
-  }
-  list.innerHTML = items.map(s => `
+function planCardHtml(s) {
+  return `
     <div class="card">
       <div class="card-header">
         <span class="badge ${s.type}">${s.type}</span>
@@ -66,23 +61,12 @@ function renderPlanTab() {
         <button class="btn danger" data-action="delete" data-id="${s.id}">Delete</button>
       </div>
     </div>
-  `).join("");
-
-  list.querySelectorAll("[data-action]").forEach(btn => {
-    btn.addEventListener("click", () => handleAction(btn.dataset.action, btn.dataset.id));
-  });
+  `;
 }
 
-function renderHistoryTab() {
-  const list = document.getElementById("history-list");
-  const items = historySessions();
-  if (items.length === 0) {
-    list.innerHTML = `<p class="empty">No completed sessions yet.</p>`;
-    return;
-  }
-  list.innerHTML = items.map(s => {
-    const hadPlan = !!s.planned;
-    return `
+function historyCardHtml(s) {
+  const hadPlan = !!s.planned;
+  return `
     <div class="card">
       <div class="card-header">
         <span class="badge ${s.type}">${s.type}</span>
@@ -115,11 +99,38 @@ function renderHistoryTab() {
       </div>
     </div>
   `;
-  }).join("");
+}
 
-  list.querySelectorAll("[data-action]").forEach(btn => {
+function sessionCardHtml(s) {
+  return s.status === "planned" ? planCardHtml(s) : historyCardHtml(s);
+}
+
+function bindCardActions(container) {
+  container.querySelectorAll("[data-action]").forEach(btn => {
     btn.addEventListener("click", () => handleAction(btn.dataset.action, btn.dataset.id));
   });
+}
+
+function renderPlanTab() {
+  const list = document.getElementById("plan-list");
+  const items = upcomingSessions();
+  if (items.length === 0) {
+    list.innerHTML = `<p class="empty">Nothing planned yet.</p>`;
+    return;
+  }
+  list.innerHTML = items.map(planCardHtml).join("");
+  bindCardActions(list);
+}
+
+function renderHistoryTab() {
+  const list = document.getElementById("history-list");
+  const items = historySessions();
+  if (items.length === 0) {
+    list.innerHTML = `<p class="empty">No completed sessions yet.</p>`;
+    return;
+  }
+  list.innerHTML = items.map(historyCardHtml).join("");
+  bindCardActions(list);
 }
 
 function escapeHtml(str) {
@@ -135,6 +146,7 @@ async function handleAction(action, id) {
   if (action === "delete") {
     if (confirm("Delete this session?")) {
       await Sessions.remove(id);
+      closeModal();
       await loadSessions();
     }
   } else if (action === "edit") {
@@ -177,8 +189,8 @@ function syncDraftFromForm(s) {
   };
 }
 
-function openPlanForm(existing) {
-  const s = existing || { id: uid(), type: "Run", title: "", date: todayISO(), status: "planned", planned: {}, actual: null };
+function openPlanForm(existing, defaultDate) {
+  const s = existing || { id: uid(), type: "Run", title: "", date: defaultDate || todayISO(), status: "planned", planned: {}, actual: null };
   openModal(`
     <h2>${existing ? "Edit" : "Plan"} a session</h2>
     <form id="plan-form">
