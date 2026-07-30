@@ -364,4 +364,62 @@ document.getElementById("tabs").addEventListener("click", (e) => {
 document.getElementById("new-plan-btn").addEventListener("click", () => openPlanForm(null));
 document.getElementById("log-unplanned-btn").addEventListener("click", () => openLogForm(null));
 
+// ---------- settings ----------
+
+function currentTheme() {
+  const explicit = document.documentElement.getAttribute("data-theme");
+  if (explicit) return explicit;
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+function currentAccent() {
+  return localStorage.getItem("accentColor")
+    || getComputedStyle(document.documentElement).getPropertyValue("--accent").trim();
+}
+
+function openSettingsModal() {
+  openModal(`
+    <h2>Settings</h2>
+    <div class="settings-row">
+      <span class="settings-row-label">Dark mode</span>
+      <label class="switch">
+        <input type="checkbox" id="dark-mode-toggle" ${currentTheme() === "dark" ? "checked" : ""}>
+        <span class="switch-slider"></span>
+      </label>
+    </div>
+    <div class="settings-row">
+      <span class="settings-row-label">Accent color</span>
+      <div class="settings-color-controls">
+        <input type="color" id="accent-color-picker" value="${currentAccent()}">
+        <button type="button" class="btn" id="reset-accent-btn">Reset</button>
+      </div>
+    </div>
+    <div class="form-actions">
+      <button type="button" class="btn primary" id="settings-done-btn">Done</button>
+    </div>
+  `);
+
+  document.getElementById("dark-mode-toggle").addEventListener("change", (e) => {
+    const next = e.target.checked ? "dark" : "light";
+    document.documentElement.setAttribute("data-theme", next);
+    localStorage.setItem("theme", next);
+  });
+
+  document.getElementById("accent-color-picker").addEventListener("input", (e) => {
+    document.documentElement.style.setProperty("--accent", e.target.value);
+    localStorage.setItem("accentColor", e.target.value);
+  });
+
+  document.getElementById("reset-accent-btn").addEventListener("click", () => {
+    document.documentElement.style.removeProperty("--accent");
+    localStorage.removeItem("accentColor");
+    closeModal();
+    openSettingsModal();
+  });
+
+  document.getElementById("settings-done-btn").addEventListener("click", closeModal);
+}
+
+document.getElementById("settings-btn").addEventListener("click", openSettingsModal);
+
 loadSessions();

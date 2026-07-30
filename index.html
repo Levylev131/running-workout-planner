@@ -16,10 +16,24 @@
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="default" />
 <meta name="apple-mobile-web-app-title" content="Run Planner" />
+
+<script>
+  (function () {
+    var savedTheme = localStorage.getItem("theme");
+    if (savedTheme === "light" || savedTheme === "dark") {
+      document.documentElement.setAttribute("data-theme", savedTheme);
+    }
+    var savedAccent = localStorage.getItem("accentColor");
+    if (savedAccent) {
+      document.documentElement.style.setProperty("--accent", savedAccent);
+    }
+  })();
+</script>
 </head>
 <body>
 <header class="topbar">
   <h1>Run &amp; Workout Planner</h1>
+  <button type="button" id="settings-btn" class="theme-toggle" aria-label="Settings">⚙️</button>
 </header>
 
 <nav class="tabs" id="tabs">

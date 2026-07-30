@@ -1,13 +1,46 @@
 :root {
+  color-scheme: light;
   --bg: #f7f7f5;
   --panel: #ffffff;
   --border: #e4e2dd;
   --text: #2b2b28;
   --text-dim: #74716a;
   --accent: #4a6d5c;
-  --accent-soft: #e5ede9;
+  --accent-soft: color-mix(in srgb, var(--accent) 15%, white);
   --danger: #b6543c;
+  --workout-soft: #eef0e5;
+  --workout-accent: #6b7a3f;
   --radius: 10px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #171917;
+    --panel: #212420;
+    --border: #363a34;
+    --text: #eae7e0;
+    --text-dim: #9a978d;
+    --accent: #5c9179;
+    --accent-soft: color-mix(in srgb, var(--accent) 25%, black);
+    --danger: #e08767;
+    --workout-soft: #2b2f22;
+    --workout-accent: #a8bd7a;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #171917;
+  --panel: #212420;
+  --border: #363a34;
+  --text: #eae7e0;
+  --text-dim: #9a978d;
+  --accent: #5c9179;
+  --accent-soft: color-mix(in srgb, var(--accent) 25%, black);
+  --danger: #e08767;
+  --workout-soft: #2b2f22;
+  --workout-accent: #a8bd7a;
 }
 
 * { box-sizing: border-box; }
@@ -21,12 +54,32 @@ body {
 
 .topbar {
   padding: 20px 16px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .topbar h1 {
   font-size: 20px;
   font-weight: 600;
   margin: 0;
+}
+
+.theme-toggle {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  border-radius: 50%;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .tabs {
@@ -108,8 +161,8 @@ body {
 }
 
 .badge.Workout {
-  background: #eef0e5;
-  color: #6b7a3f;
+  background: var(--workout-soft);
+  color: var(--workout-accent);
 }
 
 .date {
@@ -226,6 +279,7 @@ body {
   font-size: 15px;
   font-weight: normal;
   color: var(--text);
+  background: var(--panel);
   padding: 8px 10px;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -317,6 +371,7 @@ body {
   flex: 1;
   font-size: 15px;
   color: var(--text);
+  background: var(--panel);
   padding: 8px 10px;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -521,6 +576,83 @@ body {
 .cal-agenda-title {
   font-size: 14px;
   color: var(--text);
+}
+
+/* ---------- settings ---------- */
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-row:last-of-type {
+  border-bottom: none;
+}
+
+.settings-row-label {
+  font-size: 15px;
+}
+
+.settings-color-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+input[type="color"] {
+  width: 44px;
+  height: 32px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  cursor: pointer;
+}
+
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.switch-slider {
+  position: absolute;
+  inset: 0;
+  background: var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.switch-slider::before {
+  content: "";
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  left: 3px;
+  top: 3px;
+  background: white;
+  border-radius: 50%;
+  transition: transform 0.15s;
+}
+
+.switch input:checked + .switch-slider {
+  background: var(--accent);
+}
+
+.switch input:checked + .switch-slider::before {
+  transform: translateX(20px);
 }
 
 @media (min-width: 640px) {
