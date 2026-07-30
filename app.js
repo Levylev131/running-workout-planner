@@ -466,7 +466,7 @@ function openSettingsModal() {
       </div>
     </div>
     <div class="settings-section-label">Backup</div>
-    <p class="settings-hint">Your data lives only on this device. Export a backup file before switching phones or clearing browser data — Import restores from one.</p>
+    <p class="settings-hint">Your data lives only on this device. Export a backup file (sessions, theme, and profile) before switching phones or clearing browser data — Import restores from one.</p>
     <div class="settings-backup-actions">
       <button type="button" class="btn" id="export-data-btn">⬇ Export data</button>
       <button type="button" class="btn" id="import-data-btn">⬆ Import data</button>
@@ -531,9 +531,14 @@ async function exportData() {
   const allSessions = await Sessions.all();
   const payload = {
     app: "run-workout-planner",
-    version: 1,
+    version: 2,
     exportedAt: new Date().toISOString(),
     sessions: allSessions,
+    settings: {
+      theme: localStorage.getItem("theme"),
+      accentColor: localStorage.getItem("accentColor"),
+      profile: getProfile(),
+    },
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
@@ -566,6 +571,21 @@ function importData(file) {
     for (const s of payload.sessions) {
       await Sessions.upsert(s);
     }
+
+    const settings = payload.settings || {};
+    if (settings.theme === "light" || settings.theme === "dark") {
+      document.documentElement.setAttribute("data-theme", settings.theme);
+      localStorage.setItem("theme", settings.theme);
+    }
+    if (settings.accentColor) {
+      document.documentElement.style.setProperty("--accent", settings.accentColor);
+      localStorage.setItem("accentColor", settings.accentColor);
+    }
+    if (settings.profile && settings.profile.name) {
+      saveProfile(settings.profile);
+      renderProfileButton();
+    }
+
     closeModal();
     await loadSessions();
     alert("Import complete.");
