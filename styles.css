@@ -580,6 +580,56 @@ body {
 
 /* ---------- settings ---------- */
 
+.settings-profile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 14px;
+}
+
+.settings-avatar {
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.settings-profile input[type="text"] {
+  flex: 1;
+  font-size: 15px;
+  color: var(--text);
+  background: var(--panel);
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-family: inherit;
+}
+
+.settings-color-row {
+  display: flex;
+  gap: 8px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-color-row .color-swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid transparent;
+}
+
+.settings-color-row .color-swatch.active {
+  border-color: var(--text);
+}
+
 .settings-row {
   display: flex;
   align-items: center;
@@ -653,6 +703,30 @@ input[type="color"] {
 
 .switch input:checked + .switch-slider::before {
   transform: translateX(20px);
+}
+
+.settings-section-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin: 20px 0 4px;
+}
+
+.settings-hint {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin: 0 0 10px;
+}
+
+.settings-backup-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.settings-backup-actions .btn {
+  flex: 1;
 }
 
 @media (min-width: 640px) {

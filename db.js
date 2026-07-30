@@ -57,10 +57,16 @@ async function remove(storeName, id) {
   return wrap(store.delete(id));
 }
 
+async function clear(storeName) {
+  const store = await tx(storeName, "readwrite");
+  return wrap(store.clear());
+}
+
 const Sessions = {
   all: () => getAll("sessions"),
   upsert: (session) => put("sessions", session),
   remove: (id) => remove("sessions", id),
+  clear: () => clear("sessions"),
 };
 
 window.DB = { uid, Sessions };

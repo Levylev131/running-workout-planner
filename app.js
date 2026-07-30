@@ -26,6 +26,32 @@ function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
+// Duration inputs use "min.ss" (e.g. "30.30" = 30 min 30 sec), not decimal minutes —
+// the digits after the dot are literal seconds, not a fraction of a minute.
+function parseMinSec(str) {
+  if (!str) return null;
+  const [minPart, secPart] = String(str).trim().split(".");
+  const min = parseInt(minPart, 10) || 0;
+  const sec = secPart ? parseInt(secPart, 10) || 0 : 0;
+  return (min * 60 + sec) / 60;
+}
+
+function formatMinSec(mins) {
+  if (mins == null) return "";
+  const totalSec = Math.round(mins * 60);
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return s === 0 ? String(m) : `${m}.${String(s).padStart(2, "0")}`;
+}
+
+function formatDuration(mins) {
+  if (mins == null) return null;
+  const totalSec = Math.round(mins * 60);
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return s === 0 ? `${m} min` : `${m}:${String(s).padStart(2, "0")} min`;
+}
+
 function upcomingSessions() {
   return sessions
     .filter(s => s.status === "planned")
@@ -50,7 +76,7 @@ function planCardHtml(s) {
       <h3>${escapeHtml(s.title)}</h3>
       <div class="meta">
         ${s.planned.distance ? `<span>${s.planned.distance} mi</span>` : ""}
-        ${s.planned.duration ? `<span>${s.planned.duration} min</span>` : ""}
+        ${s.planned.duration ? `<span>${formatDuration(s.planned.duration)}</span>` : ""}
         ${s.planned.distance && s.planned.duration ? `<span>${pace(s.planned.distance, s.planned.duration)}</span>` : ""}
       </div>
       ${s.planned.notes ? `<p class="notes">${escapeHtml(s.planned.notes)}</p>` : ""}
@@ -78,13 +104,13 @@ function historyCardHtml(s) {
           <div class="compare-col">
             <span class="compare-label">Planned</span>
             <span>${s.planned.distance ? s.planned.distance + " mi" : "—"}</span>
-            <span>${s.planned.duration ? s.planned.duration + " min" : "—"}</span>
+            <span>${s.planned.duration ? formatDuration(s.planned.duration) : "—"}</span>
           </div>
         ` : ""}
         <div class="compare-col">
           <span class="compare-label">Actual</span>
           <span>${s.actual.distance ? s.actual.distance + " mi" : "—"}</span>
-          <span>${s.actual.duration ? s.actual.duration + " min" : "—"}</span>
+          <span>${s.actual.duration ? formatDuration(s.actual.duration) : "—"}</span>
           <span>${s.actual.distance && s.actual.duration ? pace(s.actual.distance, s.actual.duration) : ""}</span>
         </div>
         <div class="compare-col">
@@ -184,7 +210,7 @@ function syncDraftFromForm(s) {
   s.planned = {
     ...s.planned,
     distance: fd.get("distance") ? parseFloat(fd.get("distance")) : null,
-    duration: fd.get("duration") ? parseInt(fd.get("duration"), 10) : null,
+    duration: parseMinSec(fd.get("duration")),
     notes: fd.get("notes").trim(),
   };
 }
@@ -211,7 +237,7 @@ function openPlanForm(existing, defaultDate) {
           <input name="distance" type="number" step="any" min="0" value="${s.planned?.distance ?? ""}">
         </label>
         <label>Duration (min)
-          <input name="duration" type="number" step="1" min="0" value="${s.planned?.duration ?? ""}">
+          <input name="duration" type="text" inputmode="decimal" placeholder="e.g. 45 or 45.30" value="${formatMinSec(s.planned?.duration)}">
         </label>
       </div>
       <div class="route-section">
@@ -278,7 +304,7 @@ function openPlanForm(existing, defaultDate) {
     s.planned = {
       ...s.planned,
       distance: fd.get("distance") ? parseFloat(fd.get("distance")) : null,
-      duration: fd.get("duration") ? parseInt(fd.get("duration"), 10) : null,
+      duration: parseMinSec(fd.get("duration")),
       notes: fd.get("notes").trim(),
     };
     await Sessions.upsert(s);
@@ -312,7 +338,7 @@ function openLogForm(session) {
           <input name="distance" type="number" step="any" min="0" value="${s.planned?.distance ?? ""}">
         </label>
         <label>Duration (min)
-          <input name="duration" type="number" step="1" min="0" value="${s.planned?.duration ?? ""}">
+          <input name="duration" type="text" inputmode="decimal" placeholder="e.g. 45 or 45.30" value="${formatMinSec(s.planned?.duration)}">
         </label>
       </div>
       <label>Effort (1-10)
@@ -340,7 +366,7 @@ function openLogForm(session) {
     s.status = "completed";
     s.actual = {
       distance: fd.get("distance") ? parseFloat(fd.get("distance")) : null,
-      duration: fd.get("duration") ? parseInt(fd.get("duration"), 10) : null,
+      duration: parseMinSec(fd.get("duration")),
       effort: fd.get("effort") ? parseInt(fd.get("effort"), 10) : null,
       notes: fd.get("notes").trim(),
     };
@@ -364,6 +390,43 @@ document.getElementById("tabs").addEventListener("click", (e) => {
 document.getElementById("new-plan-btn").addEventListener("click", () => openPlanForm(null));
 document.getElementById("log-unplanned-btn").addEventListener("click", () => openLogForm(null));
 
+// ---------- profile ----------
+
+const AVATAR_COLORS = ["#4a6d5c", "#5c7ab8", "#b8735c", "#8a5cb8", "#b85c8a", "#5cb894"];
+
+function getProfile() {
+  const raw = localStorage.getItem("rwp_profile");
+  return raw ? JSON.parse(raw) : null;
+}
+
+function saveProfile(profile) {
+  localStorage.setItem("rwp_profile", JSON.stringify(profile));
+}
+
+function initials(name) {
+  return (name || "").trim().split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join("");
+}
+
+function renderProfileButton() {
+  const btn = document.getElementById("settings-btn");
+  const p = getProfile();
+  if (p && p.name && p.name.trim()) {
+    btn.textContent = initials(p.name);
+    btn.style.background = p.color;
+    btn.style.borderColor = p.color;
+    btn.style.color = "white";
+    btn.style.fontSize = "13px";
+    btn.style.fontWeight = "700";
+  } else {
+    btn.textContent = "⚙️";
+    btn.style.background = "";
+    btn.style.borderColor = "";
+    btn.style.color = "";
+    btn.style.fontSize = "";
+    btn.style.fontWeight = "";
+  }
+}
+
 // ---------- settings ----------
 
 function currentTheme() {
@@ -378,8 +441,16 @@ function currentAccent() {
 }
 
 function openSettingsModal() {
+  const p = getProfile();
   openModal(`
     <h2>Settings</h2>
+    <div class="settings-profile">
+      <div class="settings-avatar" id="profile-avatar-preview" style="background:${p?.color || AVATAR_COLORS[0]}">${p?.name ? initials(p.name) : "?"}</div>
+      <input type="text" id="profile-name-input" placeholder="Your name" maxlength="24" value="${p?.name ? escapeHtml(p.name) : ""}">
+    </div>
+    <div class="settings-color-row" id="profile-color-row">
+      ${AVATAR_COLORS.map(c => `<div class="color-swatch ${(p?.color || AVATAR_COLORS[0]) === c ? "active" : ""}" style="background:${c}" data-color="${c}"></div>`).join("")}
+    </div>
     <div class="settings-row">
       <span class="settings-row-label">Dark mode</span>
       <label class="switch">
@@ -394,10 +465,36 @@ function openSettingsModal() {
         <button type="button" class="btn" id="reset-accent-btn">Reset</button>
       </div>
     </div>
+    <div class="settings-section-label">Backup</div>
+    <p class="settings-hint">Your data lives only on this device. Export a backup file before switching phones or clearing browser data — Import restores from one.</p>
+    <div class="settings-backup-actions">
+      <button type="button" class="btn" id="export-data-btn">⬇ Export data</button>
+      <button type="button" class="btn" id="import-data-btn">⬆ Import data</button>
+    </div>
+    <input type="file" id="import-file-input" accept="application/json" hidden>
     <div class="form-actions">
       <button type="button" class="btn primary" id="settings-done-btn">Done</button>
     </div>
   `);
+
+  document.getElementById("profile-name-input").addEventListener("input", (e) => {
+    const prof = getProfile() || { color: AVATAR_COLORS[0] };
+    prof.name = e.target.value;
+    saveProfile(prof);
+    document.getElementById("profile-avatar-preview").textContent = initials(prof.name) || "?";
+    renderProfileButton();
+  });
+
+  document.querySelectorAll("#profile-color-row .color-swatch").forEach(sw => {
+    sw.addEventListener("click", () => {
+      const prof = getProfile() || { name: "" };
+      prof.color = sw.dataset.color;
+      saveProfile(prof);
+      document.querySelectorAll("#profile-color-row .color-swatch").forEach(s => s.classList.toggle("active", s === sw));
+      document.getElementById("profile-avatar-preview").style.background = prof.color;
+      renderProfileButton();
+    });
+  });
 
   document.getElementById("dark-mode-toggle").addEventListener("change", (e) => {
     const next = e.target.checked ? "dark" : "light";
@@ -417,9 +514,66 @@ function openSettingsModal() {
     openSettingsModal();
   });
 
+  document.getElementById("export-data-btn").addEventListener("click", exportData);
+  document.getElementById("import-data-btn").addEventListener("click", () => {
+    document.getElementById("import-file-input").click();
+  });
+  document.getElementById("import-file-input").addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    e.target.value = "";
+    if (file) importData(file);
+  });
+
   document.getElementById("settings-done-btn").addEventListener("click", closeModal);
+}
+
+async function exportData() {
+  const allSessions = await Sessions.all();
+  const payload = {
+    app: "run-workout-planner",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    sessions: allSessions,
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `run-planner-backup-${todayISO()}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function importData(file) {
+  const reader = new FileReader();
+  reader.onload = async () => {
+    let payload;
+    try {
+      payload = JSON.parse(reader.result);
+    } catch (e) {
+      alert("That file isn't valid backup data.");
+      return;
+    }
+    if (!payload || !Array.isArray(payload.sessions)) {
+      alert("That file isn't a recognized backup.");
+      return;
+    }
+    const ok = confirm(`Import ${payload.sessions.length} session(s)? This replaces everything currently in the app.`);
+    if (!ok) return;
+    await Sessions.clear();
+    for (const s of payload.sessions) {
+      await Sessions.upsert(s);
+    }
+    closeModal();
+    await loadSessions();
+    alert("Import complete.");
+  };
+  reader.readAsText(file);
 }
 
 document.getElementById("settings-btn").addEventListener("click", openSettingsModal);
 
+renderProfileButton();
 loadSessions();
