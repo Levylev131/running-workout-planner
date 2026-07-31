@@ -113,6 +113,15 @@
     }
   }
 
+  function locationDotIcon() {
+    return L.divIcon({
+      className: "user-location-marker",
+      html: '<span class="pulse"></span><span class="dot"></span>',
+      iconSize: [16, 16],
+      iconAnchor: [8, 8],
+    });
+  }
+
   function tileLayer() {
     return L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
@@ -130,6 +139,7 @@
         <button type="button" class="btn" id="route-cancel-btn">Cancel</button>
       </div>
       <div class="route-search">
+        <button type="button" class="btn" id="route-locate-btn" title="Center on my current location">📍</button>
         <input type="text" id="route-search-input" placeholder="Search address or place">
         <button type="button" class="btn" id="route-search-btn">Go</button>
       </div>
@@ -166,6 +176,22 @@
     // user has already searched or started drawing their own route.
     let userOverride = false;
 
+    let locationMarker = null;
+    function setLocationDot(latlng) {
+      if (locationMarker) locationMarker.setLatLng(latlng);
+      else locationMarker = L.marker(latlng, { icon: locationDotIcon(), interactive: false, zIndexOffset: 1000 }).addTo(map);
+      return latlng;
+    }
+
+    // Tries real GPS first, falls back to IP-based approximate location.
+    // Always drops/updates the location dot; resolves with the found
+    // [lat,lng] and a zoom level appropriate to how precise it is.
+    function locateAndMark() {
+      return tryGeolocation()
+        .then((latlng) => ({ latlng: setLocationDot(latlng), zoom: 16 }))
+        .catch(() => locateApprox().then((latlng) => ({ latlng: setLocationDot(latlng), zoom: 14 })));
+    }
+
     function redraw() {
       polyline.setLatLngs(points);
       markers.clearLayers();
@@ -177,25 +203,30 @@
       userOverride = true;
       map.fitBounds(polyline.getBounds(), { padding: [20, 20] });
       setStatus("");
+      locateAndMark().catch(() => {});
     } else {
-      tryGeolocation()
-        .then(([lat, lng]) => {
+      locateAndMark()
+        .then(({ latlng, zoom }) => {
           if (userOverride) return;
-          map.setView([lat, lng], 16);
+          map.setView(latlng, zoom);
           setStatus("");
         })
-        .catch(() =>
-          locateApprox().then(([lat, lng]) => {
-            if (userOverride) return;
-            map.setView([lat, lng], 14);
-            setStatus("");
-          })
-        )
         .catch(() => {
           if (userOverride) return;
           setStatus("Couldn't find your location — search an address or pan/zoom.");
         });
     }
+
+    document.getElementById("route-locate-btn").addEventListener("click", () => {
+      setStatus("Finding your location…");
+      locateAndMark()
+        .then(({ latlng, zoom }) => {
+          userOverride = true;
+          map.setView(latlng, zoom);
+          setStatus("");
+        })
+        .catch(() => setStatus("Couldn't find your location — search an address or pan/zoom."));
+    });
 
     document.getElementById("route-search-btn").addEventListener("click", doSearch);
     document.getElementById("route-search-input").addEventListener("keydown", (e) => {
@@ -362,7 +393,7 @@
       .catch(() => locateApprox())
       .then(([lat, lng]) => {
         startLatLng = [lat, lng];
-        L.marker(startLatLng).addTo(map);
+        L.marker(startLatLng, { icon: locationDotIcon(), interactive: false, zIndexOffset: 1000 }).addTo(map);
         map.setView(startLatLng, 14);
         return generate();
       })

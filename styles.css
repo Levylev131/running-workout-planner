@@ -402,6 +402,40 @@ body {
   font-weight: 600;
 }
 
+.user-location-marker {
+  width: 16px;
+  height: 16px;
+}
+
+.user-location-marker .dot {
+  position: absolute;
+  inset: 0;
+  background: #4285f4;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 3px rgba(0, 0, 0, 0.4);
+}
+
+.user-location-marker .pulse {
+  position: absolute;
+  inset: 0;
+  background: #4285f4;
+  border-radius: 50%;
+  opacity: 0.6;
+  animation: location-pulse 1.8s ease-out infinite;
+}
+
+@keyframes location-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(3);
+    opacity: 0;
+  }
+}
+
 /* ---------- calendar ---------- */
 
 .cal-header {
