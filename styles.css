@@ -298,6 +298,13 @@ body {
   font-family: inherit;
 }
 
+.modal input::placeholder,
+.modal textarea::placeholder {
+  color: var(--text-dim);
+  opacity: 0.65;
+  font-style: italic;
+}
+
 .modal .row {
   display: flex;
   gap: 12px;

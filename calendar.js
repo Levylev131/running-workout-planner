@@ -176,9 +176,9 @@ function openDayModal(dateISO) {
   openModal(`
     <div class="cal-day-header">
       <h2>${label}</h2>
-      <button type="button" class="btn" id="cal-day-back-btn">← Back to Calendar</button>
+      <button type="button" class="btn" id="cal-day-back-btn">← Back To Calendar</button>
     </div>
-    <button type="button" class="btn primary add-btn" id="cal-day-add-btn">+ Add session</button>
+    <button type="button" class="btn primary add-btn" id="cal-day-add-btn">+ Add Session</button>
     ${items.length === 0
       ? `<p class="empty">Nothing planned.</p>`
       : `<div class="session-list">${items.map(sessionCardHtml).join("")}</div>`}

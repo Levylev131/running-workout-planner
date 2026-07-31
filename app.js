@@ -81,7 +81,7 @@ function planCardHtml(s) {
       </div>
       ${s.planned.notes ? `<p class="notes">${escapeHtml(s.planned.notes)}</p>` : ""}
       <div class="card-actions">
-        <button class="btn primary" data-action="log" data-id="${s.id}">Log it</button>
+        <button class="btn primary" data-action="log" data-id="${s.id}">Log It</button>
         <button class="btn" data-action="edit" data-id="${s.id}">Edit</button>
         ${s.planned.route ? `<button class="btn" data-action="view-route" data-id="${s.id}">Map</button>` : ""}
         <button class="btn danger" data-action="delete" data-id="${s.id}">Delete</button>
@@ -221,7 +221,7 @@ function syncDraftFromForm(s) {
 function openPlanForm(existing, defaultDate) {
   const s = existing || { id: uid(), type: "Run", title: "", date: defaultDate || todayISO(), status: "planned", planned: {}, actual: null };
   openModal(`
-    <h2>${existing ? "Edit" : "Plan"} a session</h2>
+    <h2>${existing ? "Edit" : "Plan"} a Session</h2>
     <form id="plan-form">
       <label>Type
         <select name="type">
@@ -239,7 +239,7 @@ function openPlanForm(existing, defaultDate) {
         <label>Distance (mi)
           <input name="distance" type="number" step="any" min="0" value="${s.planned?.distance ?? ""}">
         </label>
-        <label>Duration (min)
+        <label>Target Time (min)
           <input name="duration" type="text" inputmode="decimal" placeholder="e.g. 45 or 45.30" value="${formatMinSec(s.planned?.duration)}">
         </label>
       </div>
@@ -247,12 +247,12 @@ function openPlanForm(existing, defaultDate) {
         ${s.planned?.route
           ? `<div class="route-summary">
                <span>${s.planned.route.points.length} pts · ${s.planned.route.distance} mi · ${s.planned.route.mode}${s.planned.route.roundTrip ? " · round trip" : ""}${s.planned.route.backRoute ? " · random route back" : ""}</span>
-               <button type="button" class="btn" id="edit-route-btn">Edit route</button>
+               <button type="button" class="btn" id="edit-route-btn">Edit Route</button>
                <button type="button" class="btn danger" id="clear-route-btn">Clear</button>
              </div>`
           : `<div class="route-buttons">
-               <button type="button" class="btn" id="set-route-btn">Draw route on map</button>
-               <button type="button" class="btn" id="random-route-btn">🎲 Random route</button>
+               <button type="button" class="btn" id="set-route-btn">Draw Route On Map</button>
+               <button type="button" class="btn" id="random-route-btn">🎲 Random Route</button>
              </div>`}
       </div>
       <label>Notes
@@ -320,7 +320,7 @@ function openLogForm(session) {
   const isUnplanned = !session;
   const s = session || { id: uid(), type: "Run", title: "", date: todayISO(), status: "planned", planned: null, actual: null };
   openModal(`
-    <h2>Log ${isUnplanned ? "an unplanned" : ""} session</h2>
+    <h2>${isUnplanned ? "Log An Unplanned Session" : "Log Session"}</h2>
     <form id="log-form">
       ${isUnplanned ? `
         <label>Type
@@ -455,14 +455,14 @@ function openSettingsModal() {
       ${AVATAR_COLORS.map(c => `<div class="color-swatch ${(p?.color || AVATAR_COLORS[0]) === c ? "active" : ""}" style="background:${c}" data-color="${c}"></div>`).join("")}
     </div>
     <div class="settings-row">
-      <span class="settings-row-label">Dark mode</span>
+      <span class="settings-row-label">Dark Mode</span>
       <label class="switch">
         <input type="checkbox" id="dark-mode-toggle" ${currentTheme() === "dark" ? "checked" : ""}>
         <span class="switch-slider"></span>
       </label>
     </div>
     <div class="settings-row">
-      <span class="settings-row-label">Accent color</span>
+      <span class="settings-row-label">Accent Color</span>
       <div class="settings-color-controls">
         <input type="color" id="accent-color-picker" value="${currentAccent()}">
         <button type="button" class="btn" id="reset-accent-btn">Reset</button>
@@ -471,8 +471,8 @@ function openSettingsModal() {
     <div class="settings-section-label">Backup</div>
     <p class="settings-hint">Your data lives only on this device. Export a backup file (sessions, theme, and profile) before switching phones or clearing browser data — Import restores from one.</p>
     <div class="settings-backup-actions">
-      <button type="button" class="btn" id="export-data-btn">⬇ Export data</button>
-      <button type="button" class="btn" id="import-data-btn">⬆ Import data</button>
+      <button type="button" class="btn" id="export-data-btn">⬇ Export Data</button>
+      <button type="button" class="btn" id="import-data-btn">⬆ Import Data</button>
     </div>
     <input type="file" id="import-file-input" accept="application/json" hidden>
     <div class="form-actions">

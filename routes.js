@@ -209,12 +209,12 @@
     }
   }
 
-  function locationDotIcon() {
+  function locationDotIcon(size = 16) {
     return L.divIcon({
       className: "user-location-marker",
       html: '<span class="pulse"></span><span class="dot"></span>',
-      iconSize: [16, 16],
-      iconAnchor: [8, 8],
+      iconSize: [size, size],
+      iconAnchor: [size / 2, size / 2],
     });
   }
 
@@ -253,6 +253,12 @@
     tileLayer().addTo(map);
     requestAnimationFrame(() => map.invalidateSize());
 
+    // Leaflet renders markers (markerPane, z-index 600) above vector layers
+    // (overlayPane, z-index 400) regardless of add order — so without this,
+    // the location dot always covers the drawn route wherever they overlap.
+    map.createPane("routePane");
+    map.getPane("routePane").style.zIndex = 650;
+
     map.on("moveend", () => {
       const c = map.getCenter();
       saveLastMapView([c.lat, c.lng], map.getZoom());
@@ -268,8 +274,8 @@
     let randomBack = existingRoute && existingRoute.backRoute && existingRoute.backRoute.length
       ? { points: existingRoute.backRoute.slice(), distance: totalDistance(existingRoute.backRoute) }
       : null;
-    const polyline = L.polyline(points, { color: "#4a6d5c" }).addTo(map);
-    const returnPolyline = L.polyline([], { color: "#e0862f", weight: 5, dashArray: "10 10", lineCap: "butt" }).addTo(map);
+    const polyline = L.polyline(points, { color: "#4a6d5c", pane: "routePane" }).addTo(map);
+    const returnPolyline = L.polyline([], { color: "#e0862f", weight: 5, dashArray: "10 10", lineCap: "butt", pane: "routePane" }).addTo(map);
     const markers = L.layerGroup().addTo(map);
 
     // Guards against the background auto-locate chain (GPS → IP, both real
@@ -281,7 +287,18 @@
     function setLocationDot(latlng) {
       if (locationMarker) locationMarker.setLatLng(latlng);
       else locationMarker = L.marker(latlng, { icon: locationDotIcon(), interactive: false, zIndexOffset: 1000 }).addTo(map);
+      syncLocationDotSize();
       return latlng;
+    }
+
+    // Grows the dot when the route's first point sits on top of it (snapped
+    // in the map click handler below) so it still peeks out from behind the
+    // route point drawn over it on the higher routePane.
+    function syncLocationDotSize() {
+      if (!locationMarker) return;
+      const loc = locationMarker.getLatLng();
+      const snapped = points.length > 0 && haversineMiles(points[0][0], points[0][1], loc.lat, loc.lng) < 0.005;
+      locationMarker.setIcon(locationDotIcon(snapped ? 24 : 16));
     }
 
     // Tries real GPS first, falls back to IP-based approximate location.
@@ -298,7 +315,8 @@
       if (randomBack) returnPolyline.setLatLngs(randomBack.points);
       else returnPolyline.setLatLngs(roundTrip ? points.slice().reverse() : []);
       markers.clearLayers();
-      points.forEach((p) => L.circleMarker(p, { radius: 5, color: "#4a6d5c", fillOpacity: 1 }).addTo(markers));
+      points.forEach((p) => L.circleMarker(p, { radius: 5, color: "#4a6d5c", fillOpacity: 1, pane: "routePane" }).addTo(markers));
+      syncLocationDotSize();
     }
     redraw();
 
@@ -369,7 +387,7 @@
           <button type="button" class="btn ${randomBack ? "primary" : ""}" id="random-back-btn" ${points.length < 2 ? "disabled" : ""}>🎲 ${randomBack ? "Reroll Route Back" : "Random Route Back"}</button>
           <button type="button" class="btn" id="undo-btn" ${points.length === 0 ? "disabled" : ""}>Undo</button>
           <button type="button" class="btn danger" id="clear-btn" ${points.length === 0 ? "disabled" : ""}>Clear</button>
-          <button type="button" class="btn primary" id="confirm-btn" ${points.length < 2 ? "disabled" : ""}>Use this route</button>
+          <button type="button" class="btn primary" id="confirm-btn" ${points.length < 2 ? "disabled" : ""}>Use This Route</button>
         </div>
       `;
       document.getElementById("round-trip-btn").addEventListener("click", () => {
@@ -419,7 +437,14 @@
 
     map.on("click", (e) => {
       userOverride = true;
-      points.push([e.latlng.lat, e.latlng.lng]);
+      let latlng = [e.latlng.lat, e.latlng.lng];
+      if (points.length === 0 && locationMarker) {
+        const loc = locationMarker.getLatLng();
+        const clickPx = map.latLngToContainerPoint(e.latlng);
+        const locPx = map.latLngToContainerPoint(loc);
+        if (clickPx.distanceTo(locPx) < 20) latlng = [loc.lat, loc.lng];
+      }
+      points.push(latlng);
       redraw();
       renderFooter();
     });
@@ -433,9 +458,9 @@
   function openRandomRouteBuilder(session, onConfirm) {
     const defaultMiles = (session.planned && session.planned.distance) || 3;
     openModal(`
-      <h2>Random route</h2>
+      <h2>Random Route</h2>
       <form id="random-route-form">
-        <label>How many miles?
+        <label>How Many Miles?
           <input name="miles" type="number" step="0.1" min="0.1" value="${defaultMiles}" required>
         </label>
         <div class="form-actions">
@@ -465,7 +490,7 @@
         <div class="route-distance" id="route-distance"></div>
         <div class="route-actions">
           <button type="button" class="btn" id="reroll-btn" disabled>Reroll</button>
-          <button type="button" class="btn primary" id="confirm-random-btn" disabled>Use this route</button>
+          <button type="button" class="btn primary" id="confirm-random-btn" disabled>Use This Route</button>
         </div>
       </div>
     `,
@@ -475,6 +500,8 @@
     const map = L.map("route-map").setView([39.8283, -98.5795], 4);
     tileLayer().addTo(map);
     requestAnimationFrame(() => map.invalidateSize());
+    map.createPane("routePane");
+    map.getPane("routePane").style.zIndex = 650;
 
     function setStatus(text) {
       const el = document.getElementById("route-status");
@@ -483,7 +510,7 @@
 
     let startLatLng = null;
     let currentRoute = null;
-    const polyline = L.polyline([], { color: "#4a6d5c" }).addTo(map);
+    const polyline = L.polyline([], { color: "#4a6d5c", pane: "routePane" }).addTo(map);
 
     async function generate() {
       document.getElementById("reroll-btn").disabled = true;
