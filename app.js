@@ -121,6 +121,7 @@ function historyCardHtml(s) {
       ${s.actual.notes ? `<p class="notes">${escapeHtml(s.actual.notes)}</p>` : ""}
       <div class="card-actions">
         ${hadPlan && s.planned.route ? `<button class="btn" data-action="view-route" data-id="${s.id}">Map</button>` : ""}
+        <button class="btn" data-action="share" data-id="${s.id}">📤 Share</button>
         <button class="btn danger" data-action="delete" data-id="${s.id}">Delete</button>
       </div>
     </div>
@@ -181,6 +182,8 @@ async function handleAction(action, id) {
     openLogForm(session);
   } else if (action === "view-route") {
     viewRouteModal(session.planned.route);
+  } else if (action === "share") {
+    shareRun(session);
   }
 }
 

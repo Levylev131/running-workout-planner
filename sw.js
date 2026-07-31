@@ -1,4 +1,4 @@
-const CACHE_NAME = "run-planner-v12";
+const CACHE_NAME = "run-planner-v13";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -7,6 +7,7 @@ const APP_SHELL = [
   "./routes.js",
   "./app.js",
   "./calendar.js",
+  "./share.js",
   "./manifest.json",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
