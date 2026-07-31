@@ -102,6 +102,102 @@
     return { points, distance };
   }
 
+  // Detects an out-and-back spur: two points far apart in the path sequence
+  // but very close in space, meaning the route walked out to a dead end
+  // (often where a synthetic waypoint snapped to an unconnected side street)
+  // and doubled back the same way to continue.
+  function hasSpur(points) {
+    const THRESH_MILES = 0.02;
+    for (let i = 0; i < points.length; i++) {
+      for (let j = i + 6; j < points.length; j++) {
+        if (haversineMiles(points[i][0], points[i][1], points[j][0], points[j][1]) < THRESH_MILES) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  // Fraction of a candidate return route that runs right on top of the
+  // outbound path (within ~50m — "the same street"), sampling every 3rd
+  // point on each side to keep this cheap.
+  function outboundOverlapFraction(candidatePoints, outboundPoints) {
+    const THRESH_MILES = 0.03;
+    const sample = (arr) => arr.filter((_, i) => i % 3 === 0);
+    const candidateSample = sample(candidatePoints);
+    const outboundSample = sample(outboundPoints);
+    if (!candidateSample.length) return 0;
+    let matches = 0;
+    candidateSample.forEach((p) => {
+      if (outboundSample.some((o) => haversineMiles(p[0], p[1], o[0], o[1]) < THRESH_MILES)) matches++;
+    });
+    return matches / candidateSample.length;
+  }
+
+  function bearingBetween(lat1, lng1, lat2, lng2) {
+    const toRad = (d) => (d * Math.PI) / 180;
+    const toDeg = (r) => (r * 180) / Math.PI;
+    const y = Math.sin(toRad(lng2 - lng1)) * Math.cos(toRad(lat2));
+    const x =
+      Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
+      Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(toRad(lng2 - lng1));
+    return (toDeg(Math.atan2(y, x)) + 360) % 360;
+  }
+
+  // Like fetchOneWayRoute, but forces the path onto different streets by
+  // routing through a waypoint offset to one side of the direct line back —
+  // asking OSRM for "alternatives" instead was unreliable (its public foot
+  // profile rarely offers a genuinely different one). Tries several
+  // randomized waypoints (side, position along the line, and swing distance
+  // all vary) and keeps whichever resulting route overlaps the outbound path
+  // least, as long as it's under maxMiles and spur-free — this deliberately
+  // never falls back to the plain direct route, since that's exactly the
+  // "same street straight back" result we're trying to avoid.
+  async function fetchDistinctReturnRoute(outboundPoints, maxMiles, maxAttempts = 5) {
+    const startLatLng = outboundPoints[outboundPoints.length - 1];
+    const endLatLng = outboundPoints[0];
+    const directDistance = haversineMiles(startLatLng[0], startLatLng[1], endLatLng[0], endLatLng[1]);
+    const bearing = bearingBetween(startLatLng[0], startLatLng[1], endLatLng[0], endLatLng[1]);
+
+    let best = null;
+    let bestOverlap = Infinity;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const side = Math.random() < 0.5 ? 90 : -90;
+      const t = 0.3 + Math.random() * 0.4;
+      const baseLat = startLatLng[0] + (endLatLng[0] - startLatLng[0]) * t;
+      const baseLng = startLatLng[1] + (endLatLng[1] - startLatLng[1]) * t;
+      const offsetMiles = Math.max(0.1, directDistance * 0.25) * (0.5 + Math.random());
+      const via = destinationPoint(baseLat, baseLng, bearing + side, offsetMiles);
+
+      const coords = `${startLatLng[1]},${startLatLng[0]};${via[1]},${via[0]};${endLatLng[1]},${endLatLng[0]}`;
+      const url = `https://router.project-osrm.org/route/v1/foot/${coords}?overview=full&geometries=geojson`;
+      let points, distance;
+      try {
+        const res = await fetch(url);
+        const data = await res.json();
+        if (!res.ok || data.code !== "Ok" || !data.routes || !data.routes.length) continue;
+        const route = data.routes[0];
+        points = route.geometry.coordinates.map(([lng, lat]) => [lat, lng]);
+        distance = route.distance / 1609.34;
+      } catch {
+        continue;
+      }
+
+      if (distance > maxMiles || hasSpur(points)) continue;
+
+      const overlap = outboundOverlapFraction(points, outboundPoints);
+      if (overlap < bestOverlap) {
+        best = { points, distance };
+        bestOverlap = overlap;
+      }
+      if (overlap < 0.15) break; // good enough — stop early
+    }
+
+    if (!best) throw new Error("Couldn't find a different route back — try again.");
+    return best;
+  }
+
   async function generateRandomOneWayRoute(startLatLng, targetMiles, attempt = 0) {
     const bearing = Math.random() * 360;
     const dest = destinationPoint(startLatLng[0], startLatLng[1], bearing, targetMiles);
@@ -168,7 +264,12 @@
     }
 
     let points = existingRoute ? existingRoute.points.slice() : [];
+    let roundTrip = existingRoute ? !!existingRoute.roundTrip : false;
+    let randomBack = existingRoute && existingRoute.backRoute && existingRoute.backRoute.length
+      ? { points: existingRoute.backRoute.slice(), distance: totalDistance(existingRoute.backRoute) }
+      : null;
     const polyline = L.polyline(points, { color: "#4a6d5c" }).addTo(map);
+    const returnPolyline = L.polyline([], { color: "#e0862f", weight: 5, dashArray: "10 10", lineCap: "butt" }).addTo(map);
     const markers = L.layerGroup().addTo(map);
 
     // Guards against the background auto-locate chain (GPS → IP, both real
@@ -194,6 +295,8 @@
 
     function redraw() {
       polyline.setLatLngs(points);
+      if (randomBack) returnPolyline.setLatLngs(randomBack.points);
+      else returnPolyline.setLatLngs(roundTrip ? points.slice().reverse() : []);
       markers.clearLayers();
       points.forEach((p) => L.circleMarker(p, { radius: 5, color: "#4a6d5c", fillOpacity: 1 }).addTo(markers));
     }
@@ -253,22 +356,50 @@
 
     function renderFooter() {
       const footer = document.getElementById("route-footer");
-      const dist = totalDistance(points);
+      const oneWay = totalDistance(points);
+      const backDist = randomBack ? randomBack.distance : roundTrip ? oneWay : 0;
+      const dist = oneWay + backDist;
+      let distLabel = `${dist.toFixed(2)} mi`;
+      if (randomBack) distLabel = `${dist.toFixed(2)} mi (${oneWay.toFixed(2)} out + ${randomBack.distance.toFixed(2)} back)`;
+      else if (roundTrip) distLabel = `${dist.toFixed(2)} mi round trip (${oneWay.toFixed(2)} mi out)`;
       footer.innerHTML = `
-        <div class="route-distance">${points.length ? dist.toFixed(2) + " mi" : "Tap the map to add points"}</div>
+        <div class="route-distance">${points.length ? distLabel : "Tap the map to add points"}</div>
         <div class="route-actions">
+          <button type="button" class="btn ${roundTrip ? "primary" : ""}" id="round-trip-btn" ${points.length < 2 ? "disabled" : ""}>🔁 Round Trip</button>
+          <button type="button" class="btn ${randomBack ? "primary" : ""}" id="random-back-btn" ${points.length < 2 ? "disabled" : ""}>🎲 ${randomBack ? "Reroll Route Back" : "Random Route Back"}</button>
           <button type="button" class="btn" id="undo-btn" ${points.length === 0 ? "disabled" : ""}>Undo</button>
           <button type="button" class="btn danger" id="clear-btn" ${points.length === 0 ? "disabled" : ""}>Clear</button>
           <button type="button" class="btn primary" id="confirm-btn" ${points.length < 2 ? "disabled" : ""}>Use this route</button>
         </div>
       `;
+      document.getElementById("round-trip-btn").addEventListener("click", () => {
+        roundTrip = !roundTrip;
+        randomBack = null;
+        redraw();
+        renderFooter();
+      });
+      document.getElementById("random-back-btn").addEventListener("click", async () => {
+        setStatus(randomBack ? "Finding another route back…" : "Finding a different route back…");
+        try {
+          const route = await fetchDistinctReturnRoute(points, oneWay + 4);
+          roundTrip = false;
+          randomBack = route;
+          setStatus("");
+        } catch (err) {
+          setStatus(err.message || "Couldn't find a route back — try again.");
+        }
+        redraw();
+        renderFooter();
+      });
       document.getElementById("undo-btn").addEventListener("click", () => {
         points.pop();
+        randomBack = null;
         redraw();
         renderFooter();
       });
       document.getElementById("clear-btn").addEventListener("click", () => {
         points = [];
+        randomBack = null;
         redraw();
         renderFooter();
       });
@@ -276,7 +407,9 @@
         const routeData = {
           mode: "draw",
           points: points.slice(),
-          distance: Math.round(totalDistance(points) * 100) / 100,
+          roundTrip,
+          backRoute: randomBack ? randomBack.points.slice() : null,
+          distance: Math.round(dist * 100) / 100,
         };
         map.remove();
         onConfirm(routeData);
@@ -417,7 +550,14 @@
     const map = L.map("route-map");
     tileLayer().addTo(map);
     const polyline = L.polyline(route.points, { color: "#4a6d5c" }).addTo(map);
-    map.fitBounds(polyline.getBounds(), { padding: [20, 20] });
+    const bounds = polyline.getBounds();
+    if (route.backRoute && route.backRoute.length) {
+      const backPolyline = L.polyline(route.backRoute, { color: "#e0862f", weight: 5, dashArray: "10 10", lineCap: "butt" }).addTo(map);
+      bounds.extend(backPolyline.getBounds());
+    } else if (route.roundTrip) {
+      L.polyline(route.points.slice().reverse(), { color: "#e0862f", weight: 5, dashArray: "10 10", lineCap: "butt" }).addTo(map);
+    }
+    map.fitBounds(bounds, { padding: [20, 20] });
     requestAnimationFrame(() => map.invalidateSize());
 
     document.getElementById("route-close-btn").addEventListener("click", () => {

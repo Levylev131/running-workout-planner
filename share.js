@@ -60,7 +60,8 @@
 
     const route = session.planned && session.planned.route;
     if (route && route.points && route.points.length > 1) {
-      drawRouteSilhouette(ctx, route.points, { x: 80, y: 100, w: W - 160, h: 480 });
+      const backLeg = route.backRoute || (route.roundTrip ? route.points.slice().reverse() : []);
+      drawRouteSilhouette(ctx, route.points.concat(backLeg), { x: 80, y: 100, w: W - 160, h: 480 });
     }
 
     ctx.fillStyle = "rgba(255,255,255,0.85)";

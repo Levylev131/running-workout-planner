@@ -246,7 +246,7 @@ function openPlanForm(existing, defaultDate) {
       <div class="route-section">
         ${s.planned?.route
           ? `<div class="route-summary">
-               <span>${s.planned.route.points.length} pts · ${s.planned.route.distance} mi · ${s.planned.route.mode}</span>
+               <span>${s.planned.route.points.length} pts · ${s.planned.route.distance} mi · ${s.planned.route.mode}${s.planned.route.roundTrip ? " · round trip" : ""}${s.planned.route.backRoute ? " · random route back" : ""}</span>
                <button type="button" class="btn" id="edit-route-btn">Edit route</button>
                <button type="button" class="btn danger" id="clear-route-btn">Clear</button>
              </div>`

@@ -174,7 +174,10 @@ function openDayModal(dateISO) {
   const items = calSessionsOn(dateISO);
   const label = new Date(dateISO + "T00:00:00").toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
   openModal(`
-    <h2>${label}</h2>
+    <div class="cal-day-header">
+      <h2>${label}</h2>
+      <button type="button" class="btn" id="cal-day-back-btn">← Back to Calendar</button>
+    </div>
     <button type="button" class="btn primary add-btn" id="cal-day-add-btn">+ Add session</button>
     ${items.length === 0
       ? `<p class="empty">Nothing planned.</p>`
@@ -182,4 +185,5 @@ function openDayModal(dateISO) {
   `);
   bindCardActions(document.getElementById("modal-content"));
   document.getElementById("cal-day-add-btn").addEventListener("click", () => openPlanForm(null, dateISO));
+  document.getElementById("cal-day-back-btn").addEventListener("click", closeModal);
 }

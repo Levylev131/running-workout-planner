@@ -258,6 +258,18 @@ body {
   font-size: 18px;
 }
 
+.cal-day-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.cal-day-header h2 {
+  margin-bottom: 0;
+}
+
 .modal form {
   display: flex;
   flex-direction: column;
