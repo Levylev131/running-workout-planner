@@ -1,10 +1,17 @@
 let sessions = [];
+let templates = [];
 
 async function loadSessions() {
   sessions = await Sessions.all();
+  templates = await Templates.all();
   renderPlanTab();
   renderHistoryTab();
   renderCalendarTab();
+  renderFavoritesTab();
+}
+
+function isSessionSaved(s) {
+  return templates.some(t => t.sourceSessionId === s.id);
 }
 
 // ---------- helpers ----------
@@ -85,6 +92,7 @@ function planCardHtml(s) {
         <button class="btn" data-action="edit" data-id="${s.id}">Edit</button>
         ${s.planned.route ? `<button class="btn" data-action="view-route" data-id="${s.id}">Map</button>` : ""}
         <button class="btn danger" data-action="delete" data-id="${s.id}">Delete</button>
+        <button class="icon-btn ${isSessionSaved(s) ? "saved" : ""}" data-action="save-template" data-id="${s.id}" title="Save Session" aria-label="Save Session">⭐</button>
       </div>
     </div>
   `;
@@ -123,6 +131,7 @@ function historyCardHtml(s) {
         ${hadPlan && s.planned.route ? `<button class="btn" data-action="view-route" data-id="${s.id}">Map</button>` : ""}
         <button class="btn" data-action="share" data-id="${s.id}">📤 Share</button>
         <button class="btn danger" data-action="delete" data-id="${s.id}">Delete</button>
+        <button class="icon-btn ${isSessionSaved(s) ? "saved" : ""}" data-action="save-template" data-id="${s.id}" title="Save Session" aria-label="Save Session">⭐</button>
       </div>
     </div>
   `;
@@ -160,6 +169,83 @@ function renderHistoryTab() {
   bindCardActions(list);
 }
 
+// Plain-line silhouette normalized to the route's own bounding box, same approach
+// share.js uses for the share card — no map tiles, so it works fully offline.
+function routeThumbSvg(route) {
+  if (!route || !route.points || route.points.length < 2) return "";
+  const backLeg = route.backRoute || (route.roundTrip ? route.points.slice().reverse() : []);
+  const allPoints = route.points.concat(backLeg);
+  const lats = allPoints.map(p => p[0]);
+  const lngs = allPoints.map(p => p[1]);
+  const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+  const minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
+  const latRange = maxLat - minLat || 0.001;
+  const lngRange = maxLng - minLng || 0.001;
+  const size = 100;
+  const pad = 12;
+  const scale = Math.min((size - pad * 2) / lngRange, (size - pad * 2) / latRange);
+  const midLat = (minLat + maxLat) / 2;
+  const midLng = (minLng + maxLng) / 2;
+  const pts = allPoints
+    .map(([lat, lng]) => `${(size / 2 + (lng - midLng) * scale).toFixed(1)},${(size / 2 - (lat - midLat) * scale).toFixed(1)}`)
+    .join(" ");
+  return `<svg viewBox="0 0 ${size} ${size}" preserveAspectRatio="xMidYMid meet"><polyline points="${pts}" /></svg>`;
+}
+
+function templateCardHtml(t) {
+  return `
+    <div class="card template-card">
+      <div class="template-card-main">
+        <div class="card-header">
+          <span class="badge ${t.type}">${t.type}</span>
+        </div>
+        <h3>${escapeHtml(t.title)}</h3>
+        <div class="meta">
+          ${t.distance ? `<span>${t.distance} mi</span>` : ""}
+          ${t.duration ? `<span>${formatDuration(t.duration)}</span>` : ""}
+          ${t.distance && t.duration ? `<span>${pace(t.distance, t.duration)}</span>` : ""}
+        </div>
+        ${t.notes ? `<p class="notes">${escapeHtml(t.notes)}</p>` : ""}
+        <div class="card-actions">
+          <button class="btn primary" data-tpl-action="plan" data-tpl-id="${t.id}">+ Plan This</button>
+          <button class="btn danger" data-tpl-action="delete" data-tpl-id="${t.id}">Delete</button>
+        </div>
+      </div>
+      <div class="route-thumb">${routeThumbSvg(t.route)}</div>
+    </div>
+  `;
+}
+
+function renderFavoritesTab() {
+  const list = document.getElementById("favorites-list");
+  if (templates.length === 0) {
+    list.innerHTML = `<p class="empty">No saved sessions yet. Tap ⭐ on a session's card to save one here.</p>`;
+    return;
+  }
+  list.innerHTML = templates.map(templateCardHtml).join("");
+  list.querySelectorAll("[data-tpl-action]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const tpl = templates.find(t => t.id === btn.dataset.tplId);
+      if (btn.dataset.tplAction === "delete") {
+        if (confirm("Delete this saved session?")) {
+          await Templates.remove(tpl.id);
+          await loadSessions();
+        }
+      } else if (btn.dataset.tplAction === "plan") {
+        openPlanForm({
+          id: uid(),
+          type: tpl.type,
+          title: tpl.title,
+          date: todayISO(),
+          status: "planned",
+          planned: { distance: tpl.distance, duration: tpl.duration, notes: tpl.notes, route: tpl.route || null },
+          actual: null,
+        });
+      }
+    });
+  });
+}
+
 function escapeHtml(str) {
   const div = document.createElement("div");
   div.textContent = str || "";
@@ -167,6 +253,20 @@ function escapeHtml(str) {
 }
 
 // ---------- actions ----------
+
+function sessionToTemplate(s) {
+  const source = s.status === "completed" ? (s.actual || {}) : (s.planned || {});
+  return {
+    id: uid(),
+    sourceSessionId: s.id,
+    type: s.type,
+    title: s.title,
+    distance: source.distance ?? null,
+    duration: source.duration ?? null,
+    notes: source.notes || "",
+    route: s.planned?.route || null,
+  };
+}
 
 async function handleAction(action, id) {
   const session = sessions.find(s => s.id === id);
@@ -184,7 +284,69 @@ async function handleAction(action, id) {
     viewRouteModal(session.planned.route);
   } else if (action === "share") {
     shareRun(session);
+  } else if (action === "save-template") {
+    const existingTpl = templates.find(t => t.sourceSessionId === session.id);
+    if (existingTpl) {
+      await Templates.remove(existingTpl.id);
+    } else {
+      await Templates.upsert(sessionToTemplate(session));
+    }
+    await loadSessions();
   }
+}
+
+// ---------- saved sessions (templates) ----------
+
+async function openTemplatePicker(onPick) {
+  const tplList = await Templates.all();
+  openModal(`
+    <h2>Saved Sessions</h2>
+    ${tplList.length === 0
+      ? `<p class="empty">No saved sessions yet. Use "Save Session" on a session's card first.</p>`
+      : `<div class="template-list">
+          ${tplList.map(t => `
+            <div class="template-item">
+              <div class="template-item-main">
+                <div class="template-item-title">
+                  <span class="badge ${t.type}">${t.type}</span>
+                  <strong>${escapeHtml(t.title)}</strong>
+                </div>
+                <span class="meta">
+                  ${t.distance ? `<span>${t.distance} mi</span>` : ""}
+                  ${t.duration ? `<span>${formatDuration(t.duration)}</span>` : ""}
+                  ${t.route ? `<span>has route</span>` : ""}
+                </span>
+              </div>
+              <div class="template-item-actions">
+                <button type="button" class="btn primary" data-tpl-use="${t.id}">Use</button>
+                <button type="button" class="btn danger" data-tpl-delete="${t.id}">Delete</button>
+              </div>
+            </div>
+          `).join("")}
+        </div>`}
+    <div class="form-actions">
+      <button type="button" class="btn" id="template-back-btn">← Back</button>
+    </div>
+  `);
+
+  document.getElementById("template-back-btn").addEventListener("click", () => onPick(null));
+
+  document.querySelectorAll("[data-tpl-use]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const tpl = tplList.find(t => t.id === btn.dataset.tplUse);
+      onPick(tpl);
+    });
+  });
+
+  document.querySelectorAll("[data-tpl-delete]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      if (confirm("Delete this saved session?")) {
+        await Templates.remove(btn.dataset.tplDelete);
+        await loadSessions();
+        openTemplatePicker(onPick);
+      }
+    });
+  });
 }
 
 // ---------- forms / modal ----------
@@ -220,8 +382,14 @@ function syncDraftFromForm(s) {
 
 function openPlanForm(existing, defaultDate) {
   const s = existing || { id: uid(), type: "Run", title: "", date: defaultDate || todayISO(), status: "planned", planned: {}, actual: null };
+  // Not `!existing` — a new session stays "new" across recursive re-renders (e.g. after
+  // drawing a route) even though `existing` becomes truthy once s itself is passed back in.
+  const isNew = !sessions.some(sess => sess.id === s.id);
   openModal(`
-    <h2>${existing ? "Edit" : "Plan"} a Session</h2>
+    <div class="modal-header-row">
+      <h2>${isNew ? "Plan" : "Edit"} a Session</h2>
+      ${isNew ? `<button type="button" class="btn" id="use-template-btn">📋 Load Saved Session</button>` : ""}
+    </div>
     <form id="plan-form">
       <label>Type
         <select name="type">
@@ -266,6 +434,27 @@ function openPlanForm(existing, defaultDate) {
   `);
 
   document.getElementById("cancel-btn").addEventListener("click", closeModal);
+
+  const useTemplateBtn = document.getElementById("use-template-btn");
+  if (useTemplateBtn) {
+    useTemplateBtn.addEventListener("click", () => {
+      syncDraftFromForm(s);
+      openTemplatePicker((tpl) => {
+        if (tpl) {
+          s.type = tpl.type;
+          s.title = tpl.title;
+          s.planned = {
+            ...s.planned,
+            distance: tpl.distance,
+            duration: tpl.duration,
+            notes: tpl.notes,
+            route: tpl.route || null,
+          };
+        }
+        openPlanForm(s);
+      });
+    });
+  }
 
   const routeBtn = document.getElementById("set-route-btn") || document.getElementById("edit-route-btn");
   if (routeBtn) {
@@ -532,11 +721,13 @@ function openSettingsModal() {
 
 async function exportData() {
   const allSessions = await Sessions.all();
+  const allTemplates = await Templates.all();
   const payload = {
     app: "run-workout-planner",
-    version: 2,
+    version: 3,
     exportedAt: new Date().toISOString(),
     sessions: allSessions,
+    templates: allTemplates,
     settings: {
       theme: localStorage.getItem("theme"),
       accentColor: localStorage.getItem("accentColor"),
@@ -568,11 +759,16 @@ function importData(file) {
       alert("That file isn't a recognized backup.");
       return;
     }
-    const ok = confirm(`Import ${payload.sessions.length} session(s)? This replaces everything currently in the app.`);
+    const templates = Array.isArray(payload.templates) ? payload.templates : [];
+    const ok = confirm(`Import ${payload.sessions.length} session(s) and ${templates.length} saved session(s)? This replaces everything currently in the app.`);
     if (!ok) return;
     await Sessions.clear();
     for (const s of payload.sessions) {
       await Sessions.upsert(s);
+    }
+    await Templates.clear();
+    for (const t of templates) {
+      await Templates.upsert(t);
     }
 
     const settings = payload.settings || {};

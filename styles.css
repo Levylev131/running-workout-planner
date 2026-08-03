@@ -139,11 +139,71 @@ body {
   padding: 14px 16px;
 }
 
+.template-card {
+  display: flex;
+  gap: 12px;
+}
+
+.template-card-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.route-thumb {
+  width: 126px;
+  height: 126px;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.route-thumb svg {
+  width: 100%;
+  height: 100%;
+}
+
+.route-thumb polyline {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 6px;
+}
+
+.icon-btn {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.card-actions .icon-btn {
+  margin-left: auto;
+}
+
+.icon-btn.saved {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
 }
 
 .card h3 {
@@ -258,7 +318,8 @@ body {
   font-size: 18px;
 }
 
-.cal-day-header {
+.cal-day-header,
+.modal-header-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -266,8 +327,13 @@ body {
   margin-bottom: 14px;
 }
 
-.cal-day-header h2 {
+.cal-day-header h2,
+.modal-header-row h2 {
   margin-bottom: 0;
+}
+
+.modal-header-row {
+  flex-wrap: wrap;
 }
 
 .modal form {
@@ -348,6 +414,43 @@ body {
 
 .route-summary span {
   color: var(--text-dim);
+}
+
+.template-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.template-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  flex-wrap: wrap;
+}
+
+.template-item-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.template-item-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.template-item-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .modal.map-modal {

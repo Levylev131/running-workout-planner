@@ -1,6 +1,6 @@
-// IndexedDB layer — single "sessions" store.
+// IndexedDB layer — "sessions" and "templates" stores.
 const DB_NAME = "running-workout-planner";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 function uid() {
   // crypto.randomUUID() requires a secure context (HTTPS or localhost) — falls back
@@ -22,6 +22,9 @@ function openDB() {
         const s = db.createObjectStore("sessions", { keyPath: "id" });
         s.createIndex("date", "date");
         s.createIndex("status", "status");
+      }
+      if (!db.objectStoreNames.contains("templates")) {
+        db.createObjectStore("templates", { keyPath: "id" });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -69,4 +72,11 @@ const Sessions = {
   clear: () => clear("sessions"),
 };
 
-window.DB = { uid, Sessions };
+const Templates = {
+  all: () => getAll("templates"),
+  upsert: (template) => put("templates", template),
+  remove: (id) => remove("templates", id),
+  clear: () => clear("templates"),
+};
+
+window.DB = { uid, Sessions, Templates };
