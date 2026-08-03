@@ -1,6 +1,16 @@
 let sessions = [];
 let templates = [];
 
+// Classic "square and arrow up" share glyph (iOS/system share icon) — hand-built
+// since no emoji matches it; stroke uses currentColor so it follows --text/theme.
+const SHARE_ICON_SVG = `
+  <svg viewBox="0 0 24 24" width="24" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 3v12" />
+    <path d="M8 7l4-4 4 4" />
+    <path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7" />
+  </svg>
+`;
+
 async function loadSessions() {
   sessions = await Sessions.all();
   templates = await Templates.all();
@@ -154,8 +164,8 @@ function historyCardHtml(s) {
       <div class="card-actions">
         <button class="btn" data-action="log" data-id="${s.id}">Edit</button>
         ${hadPlan && s.planned.route ? `<button class="btn" data-action="view-route" data-id="${s.id}">Map</button>` : ""}
-        <button class="btn" data-action="share" data-id="${s.id}">📤 Share</button>
         <button class="btn danger" data-action="delete" data-id="${s.id}">Delete</button>
+        <button class="btn btn-icon" data-action="share" data-id="${s.id}" title="Share" aria-label="Share">${SHARE_ICON_SVG}</button>
         <button class="icon-btn ${isSessionSaved(s) ? "saved" : ""}" data-action="save-template" data-id="${s.id}" title="Save Session" aria-label="Save Session">⭐</button>
       </div>
     </div>
@@ -377,8 +387,10 @@ async function openTemplatePicker(onPick) {
 // ---------- forms / modal ----------
 
 function openModal(html, { fullscreen = false } = {}) {
-  document.getElementById("modal-content").innerHTML = html;
-  document.getElementById("modal-content").classList.toggle("map-modal", fullscreen);
+  const content = document.getElementById("modal-content");
+  content.innerHTML = html;
+  content.classList.toggle("map-modal", fullscreen);
+  content.scrollTop = 0;
   document.getElementById("modal-overlay").classList.remove("hidden");
 }
 
@@ -388,6 +400,45 @@ function closeModal() {
 
 document.getElementById("modal-overlay").addEventListener("click", (e) => {
   if (e.target.id === "modal-overlay") closeModal();
+});
+
+// Delegated so it keeps working across modal re-renders (plan form, log form, etc.)
+document.getElementById("modal-content").addEventListener("input", (e) => {
+  if (e.target.name === "duration_m" && e.target.value.length >= 2) {
+    e.target.closest("form")?.querySelector('input[name="duration_s"]')?.focus();
+  }
+});
+
+function focusNextFormField(el) {
+  const form = el.closest("form");
+  if (!form) return;
+  const focusable = Array.from(form.elements).filter(
+    (f) => !f.disabled && f.type !== "hidden" && f.type !== "submit" && f.type !== "button"
+  );
+  const next = focusable[focusable.indexOf(el) + 1];
+  if (!next) return;
+  // iOS Safari often swallows a focus() called while its native date picker is
+  // still dismissing — deferring a tick lets that teardown finish first so the
+  // keyboard for the next field actually opens.
+  setTimeout(() => next.focus(), 0);
+}
+
+// Enter on a single-line field advances to the next field instead of submitting
+// the form early — textareas (e.g. Notes) are untouched so Enter still adds a newline.
+document.getElementById("modal-content").addEventListener("keydown", (e) => {
+  if (e.key !== "Enter" || e.target.tagName !== "INPUT") return;
+  e.preventDefault();
+  focusNextFormField(e.target);
+});
+
+// Dismissing the native date picker (tapping "Done"/checkmark) advances to the
+// next field. Uses "focusout" (the bubbling version of "blur") rather than
+// "change", because "change" only fires if the date value was actually edited —
+// confirming the picker without changing the day wouldn't otherwise fire anything.
+document.getElementById("modal-content").addEventListener("focusout", (e) => {
+  if (e.target.tagName === "INPUT" && e.target.type === "date") {
+    focusNextFormField(e.target);
+  }
 });
 
 function syncDraftFromForm(s) {
@@ -428,14 +479,12 @@ function openPlanForm(existing, defaultDate) {
       <label>Date
         <input name="date" type="date" required value="${s.date}">
       </label>
-      <div class="row">
-        <label>Distance (mi)
-          <input name="distance" type="number" step="any" min="0" value="${s.planned?.distance ?? ""}">
-        </label>
-        <label>Target Time
-          ${hmsInputsHtml(s.planned?.duration)}
-        </label>
-      </div>
+      <label>Distance (mi)
+        <input name="distance" type="number" step="any" min="0" value="${s.planned?.distance ?? ""}">
+      </label>
+      <label>Target Time
+        ${hmsInputsHtml(s.planned?.duration)}
+      </label>
       <div class="route-section">
         ${s.planned?.route
           ? `<div class="route-summary">
@@ -530,35 +579,65 @@ function openPlanForm(existing, defaultDate) {
   });
 }
 
+function syncLogDraftFromForm(s, isUnplanned) {
+  const form = document.getElementById("log-form");
+  if (!form) return;
+  const fd = new FormData(form);
+  if (isUnplanned) {
+    s.type = fd.get("type");
+    s.title = fd.get("title").trim();
+    s.date = fd.get("date");
+  }
+  s.actual = {
+    ...s.actual,
+    distance: fd.get("distance") ? parseFloat(fd.get("distance")) : null,
+    duration: hmsToMinutes(fd.get("duration_h"), fd.get("duration_m"), fd.get("duration_s")),
+    effort: fd.get("effort") ? parseInt(fd.get("effort"), 10) : null,
+    notes: fd.get("notes").trim(),
+  };
+}
+
 function openLogForm(session) {
-  const isUnplanned = !session;
-  const isEditingCompleted = !!session && session.status === "completed";
   const s = session || { id: uid(), type: "Run", title: "", date: todayISO(), status: "planned", planned: null, actual: null };
-  const source = isEditingCompleted ? s.actual : s.planned;
+  // Not `!session` — stays "unplanned" across recursive re-renders (e.g. after
+  // drawing a route) even though `session` becomes truthy once s itself is passed back in.
+  const isUnplanned = !sessions.some(sess => sess.id === s.id);
+  const isEditingCompleted = s.status === "completed";
+  const source = s.actual || s.planned;
   openModal(`
     <h2>${isUnplanned ? "Log An Unplanned Session" : isEditingCompleted ? "Edit Session" : "Log Session"}</h2>
     <form id="log-form">
       ${isUnplanned ? `
         <label>Type
           <select name="type">
-            <option value="Run">Run</option>
-            <option value="Workout">Workout</option>
+            <option value="Run" ${s.type === "Run" ? "selected" : ""}>Run</option>
+            <option value="Workout" ${s.type === "Workout" ? "selected" : ""}>Workout</option>
           </select>
         </label>
         <label>Title
-          <input name="title" type="text" required placeholder="e.g. Easy 5k, Leg day">
+          <input name="title" type="text" required value="${escapeHtml(s.title)}" placeholder="e.g. Easy 5k, Leg day">
         </label>
         <label>Date
-          <input name="date" type="date" required value="${todayISO()}">
+          <input name="date" type="date" required value="${s.date}">
         </label>
       ` : `<p class="log-target">${escapeHtml(s.title)} — ${fmtDate(s.date)}</p>`}
-      <div class="row">
-        <label>Distance (mi)
-          <input name="distance" type="number" step="any" min="0" value="${source?.distance ?? ""}">
-        </label>
-        <label>Duration
-          ${hmsInputsHtml(source?.duration)}
-        </label>
+      <label>Distance Covered (mi)
+        <input name="distance" type="number" step="any" min="0" value="${source?.distance ?? ""}">
+      </label>
+      <label>Time Taken
+        ${hmsInputsHtml(source?.duration)}
+      </label>
+      <div class="route-section">
+        ${s.planned?.route
+          ? `<div class="route-summary">
+               <span>${s.planned.route.points.length} pts · ${s.planned.route.distance} mi · ${s.planned.route.mode}${s.planned.route.roundTrip ? " · round trip" : ""}${s.planned.route.backRoute ? " · random route back" : ""}</span>
+               <button type="button" class="btn" id="edit-route-btn">Edit Route</button>
+               <button type="button" class="btn danger" id="clear-route-btn">Clear</button>
+             </div>`
+          : `<div class="route-buttons">
+               <button type="button" class="btn" id="set-route-btn">Draw Route On Map</button>
+               <button type="button" class="btn" id="random-route-btn">🎲 Random Route</button>
+             </div>`}
       </div>
       <label>Effort (1-10)
         <input name="effort" type="number" min="1" max="10" step="1" value="${source?.effort ?? ""}">
@@ -574,6 +653,40 @@ function openLogForm(session) {
   `);
 
   document.getElementById("cancel-btn").addEventListener("click", closeModal);
+
+  const routeBtn = document.getElementById("set-route-btn") || document.getElementById("edit-route-btn");
+  if (routeBtn) {
+    routeBtn.addEventListener("click", () => {
+      syncLogDraftFromForm(s, isUnplanned);
+      s.planned = s.planned || {};
+      openRouteBuilder(s, (routeData) => {
+        s.planned.route = routeData;
+        s.actual = { ...s.actual, distance: routeData.distance };
+        openLogForm(s);
+      });
+    });
+  }
+  const clearRouteBtn = document.getElementById("clear-route-btn");
+  if (clearRouteBtn) {
+    clearRouteBtn.addEventListener("click", () => {
+      syncLogDraftFromForm(s, isUnplanned);
+      s.planned.route = null;
+      openLogForm(s);
+    });
+  }
+  const randomRouteBtn = document.getElementById("random-route-btn");
+  if (randomRouteBtn) {
+    randomRouteBtn.addEventListener("click", () => {
+      syncLogDraftFromForm(s, isUnplanned);
+      s.planned = s.planned || {};
+      openRandomRouteBuilder(s, (routeData) => {
+        s.planned.route = routeData;
+        s.actual = { ...s.actual, distance: routeData.distance };
+        openLogForm(s);
+      });
+    });
+  }
+
   document.getElementById("log-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);

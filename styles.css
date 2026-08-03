@@ -266,6 +266,7 @@ body {
 
 .card-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 10px;
 }
@@ -278,6 +279,14 @@ body {
   border-radius: 8px;
   font-size: 14px;
   cursor: pointer;
+}
+
+.btn svg {
+  display: block;
+}
+
+.btn-icon {
+  padding: 8px 10px;
 }
 
 .btn.primary {
@@ -310,6 +319,7 @@ body {
   width: 100%;
   max-width: 480px;
   max-height: 90vh;
+  max-height: 90dvh;
   overflow-y: auto;
 }
 
@@ -371,15 +381,6 @@ body {
   font-style: italic;
 }
 
-.modal .row {
-  display: flex;
-  gap: 12px;
-}
-
-.modal .row label {
-  flex: 1;
-}
-
 .hms-inputs {
   display: flex;
   gap: 8px;
@@ -397,6 +398,14 @@ body {
 .hms-field input {
   width: 100%;
   text-align: center;
+  padding: 8px 4px;
+  -moz-appearance: textfield;
+}
+
+.hms-field input::-webkit-outer-spin-button,
+.hms-field input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
 .hms-unit {
