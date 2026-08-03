@@ -354,7 +354,7 @@ body {
 .modal input,
 .modal select,
 .modal textarea {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: normal;
   color: var(--text);
   background: var(--panel);
@@ -378,6 +378,31 @@ body {
 
 .modal .row label {
   flex: 1;
+}
+
+.hms-inputs {
+  display: flex;
+  gap: 8px;
+}
+
+.hms-field {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.hms-field input {
+  width: 100%;
+  text-align: center;
+}
+
+.hms-unit {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-weight: normal;
 }
 
 .log-target {
@@ -491,7 +516,7 @@ body {
 
 .route-search input {
   flex: 1;
-  font-size: 15px;
+  font-size: 16px;
   color: var(--text);
   background: var(--panel);
   padding: 8px 10px;
@@ -758,7 +783,7 @@ body {
 
 .settings-profile input[type="text"] {
   flex: 1;
-  font-size: 15px;
+  font-size: 16px;
   color: var(--text);
   background: var(--panel);
   padding: 8px 10px;

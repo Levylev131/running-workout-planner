@@ -23,40 +23,64 @@ function fmtDate(iso) {
 
 function pace(distance, duration) {
   if (!distance || !duration) return null;
-  const perMile = duration / distance;
-  const min = Math.floor(perMile);
-  const sec = Math.round((perMile - min) * 60);
-  return `${min}:${String(sec).padStart(2, "0")}/mi`;
+  const mph = distance / (duration / 60);
+  return `${mph.toFixed(2)} mph`;
 }
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
-// Duration inputs use "min.ss" (e.g. "30.30" = 30 min 30 sec), not decimal minutes —
-// the digits after the dot are literal seconds, not a fraction of a minute.
-function parseMinSec(str) {
-  if (!str) return null;
-  const [minPart, secPart] = String(str).trim().split(".");
-  const min = parseInt(minPart, 10) || 0;
-  const sec = secPart ? parseInt(secPart, 10) || 0 : 0;
-  return (min * 60 + sec) / 60;
+// Duration is entered as separate hours/minutes/seconds inputs but stored as
+// plain decimal minutes (same as always), so pace() and existing data need no changes.
+function hmsToMinutes(h, m, s) {
+  if (!h && !m && !s) return null;
+  const hh = parseInt(h, 10) || 0;
+  const mm = parseInt(m, 10) || 0;
+  const ss = parseInt(s, 10) || 0;
+  return hh * 60 + mm + ss / 60;
 }
 
-function formatMinSec(mins) {
-  if (mins == null) return "";
+function minutesToHms(mins) {
+  if (mins == null) return { h: "", m: "", s: "" };
   const totalSec = Math.round(mins * 60);
-  const m = Math.floor(totalSec / 60);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
   const s = totalSec % 60;
-  return s === 0 ? String(m) : `${m}.${String(s).padStart(2, "0")}`;
+  return { h: h ? String(h) : "", m: String(m), s: String(s) };
+}
+
+function hmsInputsHtml(mins) {
+  const hms = minutesToHms(mins);
+  return `
+    <div class="hms-inputs">
+      <div class="hms-field">
+        <input name="duration_h" type="number" inputmode="numeric" min="0" placeholder="0" value="${hms.h}">
+        <span class="hms-unit">hr</span>
+      </div>
+      <div class="hms-field">
+        <input name="duration_m" type="number" inputmode="numeric" min="0" max="59" placeholder="0" value="${hms.m}">
+        <span class="hms-unit">min</span>
+      </div>
+      <div class="hms-field">
+        <input name="duration_s" type="number" inputmode="numeric" min="0" max="59" placeholder="0" value="${hms.s}">
+        <span class="hms-unit">sec</span>
+      </div>
+    </div>
+  `;
 }
 
 function formatDuration(mins) {
   if (mins == null) return null;
   const totalSec = Math.round(mins * 60);
-  const m = Math.floor(totalSec / 60);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
   const s = totalSec % 60;
-  return s === 0 ? `${m} min` : `${m}:${String(s).padStart(2, "0")} min`;
+  if (h > 0) {
+    const mm = String(m).padStart(2, "0");
+    return s === 0 ? `${h}:${mm} min` : `${h}:${mm}.${String(s).padStart(2, "0")} min`;
+  }
+  return s === 0 ? `${m} min` : `${m}.${String(s).padStart(2, "0")} min`;
 }
 
 function upcomingSessions() {
@@ -128,6 +152,7 @@ function historyCardHtml(s) {
       </div>
       ${s.actual.notes ? `<p class="notes">${escapeHtml(s.actual.notes)}</p>` : ""}
       <div class="card-actions">
+        <button class="btn" data-action="log" data-id="${s.id}">Edit</button>
         ${hadPlan && s.planned.route ? `<button class="btn" data-action="view-route" data-id="${s.id}">Map</button>` : ""}
         <button class="btn" data-action="share" data-id="${s.id}">📤 Share</button>
         <button class="btn danger" data-action="delete" data-id="${s.id}">Delete</button>
@@ -375,7 +400,7 @@ function syncDraftFromForm(s) {
   s.planned = {
     ...s.planned,
     distance: fd.get("distance") ? parseFloat(fd.get("distance")) : null,
-    duration: parseMinSec(fd.get("duration")),
+    duration: hmsToMinutes(fd.get("duration_h"), fd.get("duration_m"), fd.get("duration_s")),
     notes: fd.get("notes").trim(),
   };
 }
@@ -407,8 +432,8 @@ function openPlanForm(existing, defaultDate) {
         <label>Distance (mi)
           <input name="distance" type="number" step="any" min="0" value="${s.planned?.distance ?? ""}">
         </label>
-        <label>Target Time (min)
-          <input name="duration" type="text" inputmode="decimal" placeholder="e.g. 45 or 45.30" value="${formatMinSec(s.planned?.duration)}">
+        <label>Target Time
+          ${hmsInputsHtml(s.planned?.duration)}
         </label>
       </div>
       <div class="route-section">
@@ -496,7 +521,7 @@ function openPlanForm(existing, defaultDate) {
     s.planned = {
       ...s.planned,
       distance: fd.get("distance") ? parseFloat(fd.get("distance")) : null,
-      duration: parseMinSec(fd.get("duration")),
+      duration: hmsToMinutes(fd.get("duration_h"), fd.get("duration_m"), fd.get("duration_s")),
       notes: fd.get("notes").trim(),
     };
     await Sessions.upsert(s);
@@ -507,9 +532,11 @@ function openPlanForm(existing, defaultDate) {
 
 function openLogForm(session) {
   const isUnplanned = !session;
+  const isEditingCompleted = !!session && session.status === "completed";
   const s = session || { id: uid(), type: "Run", title: "", date: todayISO(), status: "planned", planned: null, actual: null };
+  const source = isEditingCompleted ? s.actual : s.planned;
   openModal(`
-    <h2>${isUnplanned ? "Log An Unplanned Session" : "Log Session"}</h2>
+    <h2>${isUnplanned ? "Log An Unplanned Session" : isEditingCompleted ? "Edit Session" : "Log Session"}</h2>
     <form id="log-form">
       ${isUnplanned ? `
         <label>Type
@@ -527,17 +554,17 @@ function openLogForm(session) {
       ` : `<p class="log-target">${escapeHtml(s.title)} — ${fmtDate(s.date)}</p>`}
       <div class="row">
         <label>Distance (mi)
-          <input name="distance" type="number" step="any" min="0" value="${s.planned?.distance ?? ""}">
+          <input name="distance" type="number" step="any" min="0" value="${source?.distance ?? ""}">
         </label>
-        <label>Duration (min)
-          <input name="duration" type="text" inputmode="decimal" placeholder="e.g. 45 or 45.30" value="${formatMinSec(s.planned?.duration)}">
+        <label>Duration
+          ${hmsInputsHtml(source?.duration)}
         </label>
       </div>
       <label>Effort (1-10)
-        <input name="effort" type="number" min="1" max="10" step="1">
+        <input name="effort" type="number" min="1" max="10" step="1" value="${source?.effort ?? ""}">
       </label>
       <label>Notes
-        <textarea name="notes" rows="3" placeholder="how it felt, splits, anything else"></textarea>
+        <textarea name="notes" rows="3" placeholder="how it felt, splits, anything else">${escapeHtml(source?.notes || "")}</textarea>
       </label>
       <div class="form-actions">
         <button type="button" class="btn" id="cancel-btn">Cancel</button>
@@ -558,7 +585,7 @@ function openLogForm(session) {
     s.status = "completed";
     s.actual = {
       distance: fd.get("distance") ? parseFloat(fd.get("distance")) : null,
-      duration: parseMinSec(fd.get("duration")),
+      duration: hmsToMinutes(fd.get("duration_h"), fd.get("duration_m"), fd.get("duration_s")),
       effort: fd.get("effort") ? parseInt(fd.get("effort"), 10) : null,
       notes: fd.get("notes").trim(),
     };
